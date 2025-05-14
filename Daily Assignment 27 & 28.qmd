@@ -52,6 +52,7 @@ river_merged <- st_as_sf(st_sfc(river_geom, crs = st_crs(poudre)))
 river_length <- st_length(river_merged)%>%
   print()
 ```
+In Total, the Cashe La Poudre river is 205,508 meters long!   
 
 ```{r}
 #4: Use st_cast() to convert the river object to a POINT object and save it as poudre_pts for later extraction tasks
@@ -128,6 +129,8 @@ straight_line_distance <- st_distance(first_point, last_point)%>%
 
 
 ```
+From the starting point to the ending point of the river, as the crow flies, is 52,972.73 meters, which is drmatically smaller than the total length.
+
 
 ```{r}
 #10: Divide the length of the full river (step 3) by this straight-line distance to get the sinuosity. Report the value and what it means. Does this value make sense with respect to the complete Poudre River?
@@ -156,17 +159,27 @@ slope <- elevation_change / river_length
 slope
 
 ```
+The slope of the river between the inlet and outlet is approximately 0.053 cm per meter.
+This is a gentle slope.
+
 
 ```{r}
 #12: Use ggplot() to create a line plot of the elevation values along the river. Be sure to use the ID column as the x-axis and the dem column as the y-axis. Add nice labels and themes to your chart
 library(ggplot2)
 
+#rq cleaning before graphing
+river_profile_clean <- river_profile %>%
+  filter(!is.na(elevation_cm))
+river_profile_clean <- river_profile_clean %>%
+  mutate(ID = row_number())
+
 # Plot the river profile (elevation along the river)
-ggplot(river_profile, aes(x = ID, y = elevation_cm)) +
-  geom_line() +
+ggplot(river_profile_clean, aes(x = ID, y = elevation_cm)) +
+  geom_line(color = "blue") +
   labs(title = "Elevation Profile of Cache la Poudre River",
-       x = "Point ID", y = "Elevation (cm)") +
+       x = "Point ID (cleaned)", y = "Elevation (cm)") +
   theme_minimal()
 
 ```
 
+We get a mostly clean slope downwards save for a strange increase then rapid decrease in elivation that occurs near the end of the river.
