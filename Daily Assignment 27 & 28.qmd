@@ -1,0 +1,133 @@
+---
+title: "Final assignment"
+format: html
+editor: visual
+---
+
+```{r}
+#1: Extract all waterways from OpenStreetMap for the Bounding Box of Fort Collins, CO
+library(osmdata)
+library(sf)
+
+# Define the bounding box for Fort Collins
+# Coordinates for Fort Collins, CO
+fc_bbox <- c(-105.3, 39.9, -104.8, 40.3)  # Adjust the bounding box around Fort Collins
+
+# Query OSM for waterways (including riverways, streams, etc.) in the bounding box
+osm_data <- opq(bbox = fc_bbox) %>%
+  add_osm_feature("waterway") %>%    # Query for all waterway features (rivers, streams, etc.)
+  osmdata_sf()
+
+```
+
+
+
+```{r}
+#2: Filter the osm_lines object to only include the Cache la Poudre River and merge the lines into a single line object with st_union(). Convert the object to a sf object with st_as_sf() when done.
+# Convert osm_lines to an sf object if necessary
+osm_lines_sf <- st_as_sf(osm_data$osm_lines)
+
+# Filter for Cache la Poudre River, ignoring NA values in the name
+river_lines <- osm_lines_sf %>%
+  filter(!is.na(name) & name == "Cache la Poudre River")
+
+
+# If osm_lines are not returned (NULL), we need to check for alternative features
+if (is.null(river_lines)) {
+  print("Cache la Poudre River not found in the filtered data. Check osm_polygons or osm_points.")
+} else {
+  # If successfully filtered, proceed with further analysis
+  print("Cache la Poudre River found!")
+}
+
+```
+
+
+```{r}
+#3: Use st_length() to compute the length of the river for future calculations
+# Compute the length of the river
+river_length <- st_length(river_merged)
+```
+
+```{r}
+#4: Use st_cast() to convert the river object to a POINT object and save it as poudre_pts for later extraction tasks
+# Convert the river object to points for extraction later
+poudre_pts <- st_cast(river_merged, "POINT")
+
+```
+
+```{r}
+#5: Use the rast() function to read in the DEM file from the lynker-spatial S3 bucket shared in the last assignment. Be sure to use the vsis3 prefix!
+library(terra)
+
+# Read in DEM file from the S3 bucket using the vsis3 prefix
+dem <- rast('/vsis3/lynker-spatial/gridded-resources/dem.vrt')
+
+```
+
+```{r}
+#6: Use the extract() function to extract the elevation values from the DEM at the points along the river
+# Extract elevation values from the DEM at each point along the river
+elevation_values <- extract(dem, poudre_pts)
+
+```
+
+```{r}
+#7: Use bind_cols() to combine the spatial river points with the extracted elevation values
+# Combine the river points with the extracted elevation values
+river_profile <- bind_cols(st_coordinates(poudre_pts), elevation_values)
+
+```
+
+```{r}
+#8: Use mutate() to add a new column called ID that is a sequence from 1 to the number of points in the river (n())
+library(dplyr)
+
+# Add an ID column for later use (sequence of points)
+river_profile <- river_profile %>%
+  mutate(ID = row_number())
+
+
+```
+
+```{r}
+#9: Use the st_distance() function to compute the straight-line distance between the first and last points in the river
+# Compute straight-line distance between the first and last points
+
+straight_line_distance <- st_distance(st_startpoint(poudre_pts), st_endpoint(poudre_pts))
+
+```
+
+```{r}
+#10: Divide the length of the full river (step 3) by this straight-line distance to get the sinuosity. Report the value and what it means. Does this value make sense with respect to the complete Poudre River?
+# Sinuosity calculation: river length / straight-line distance
+sinuosity <- river_length / straight_line_distance
+
+```
+
+```{r}
+#11: The slope of a river is the change in elevation between the inlet and outlet divided by the length of the river. Compute this value and report it. Remember the units of the elevation (cm) and of your length!
+# Calculate the change in elevation (max - min elevation along the river)
+elevation_change <- max(river_profile$elevation) - min(river_profile$elevation)
+
+# Compute slope (elevation change / river length)
+slope <- elevation_change / river_length
+
+# Report the slope value
+slope
+
+```
+
+```{r}
+#12: Use ggplot() to create a line plot of the elevation values along the river. Be sure to use the ID column as the x-axis and the dem column as the y-axis. Add nice labels and themes to your chart
+library(ggplot2)
+
+# Plot the river profile (elevation along the river)
+ggplot(river_profile, aes(x = ID, y = elevation)) +
+  geom_line() +
+  labs(title = "Elevation Profile of Cache la Poudre River",
+       x = "Point ID", y = "Elevation (m)") +
+  theme_minimal()
+
+```
+
