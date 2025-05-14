@@ -9,13 +9,14 @@ editor: visual
 library(osmdata)
 library(sf)
 
-# Define the bounding box for Fort Collins
-# Coordinates for Fort Collins, CO
-fc_bbox <- c(-105.3, 39.9, -104.8, 40.3)  # Adjust the bounding box around Fort Collins
+# remotes::install_github("mikejohnson51/AOI")
+fc = AOI::geocode("Fort Collins", bbox = TRUE)
 
-# Query OSM for waterways (including riverways, streams, etc.) in the bounding box
-osm_data <- opq(bbox = fc_bbox) %>%
-  add_osm_feature("waterway") %>%    # Query for all waterway features (rivers, streams, etc.)
+library(osmdata)
+#> Data (c) OpenStreetMap contributors, ODbL 1.0. https://www.openstreetmap.org/copyright
+
+osm = opq(st_bbox(st_transform(fc, 4326))) |>
+  add_osm_feature(key = "waterway", value = "river") |>
   osmdata_sf()
 
 ```
@@ -24,29 +25,26 @@ osm_data <- opq(bbox = fc_bbox) %>%
 
 ```{r}
 #2: Filter the osm_lines object to only include the Cache la Poudre River and merge the lines into a single line object with st_union(). Convert the object to a sf object with st_as_sf() when done.
-# Convert osm_lines to an sf object if necessary
-osm_lines_sf <- st_as_sf(osm_data$osm_lines)
 
-# Filter for Cache la Poudre River, ignoring NA values in the name
-river_lines <- osm_lines_sf %>%
-  filter(!is.na(name) & name == "Cache la Poudre River")
+#2: Filter for Cache la Poudre River, merge, convert
 
+# Only keep lines with name "Cache la Poudre River"
+poudre = osm$osm_lines %>%
+  filter(grepl("Cache", name, ignore.case = TRUE))
 
-# If osm_lines are not returned (NULL), we need to check for alternative features
-if (is.null(river_lines)) {
-  print("Cache la Poudre River not found in the filtered data. Check osm_polygons or osm_points.")
-} else {
-  # If successfully filtered, proceed with further analysis
-  print("Cache la Poudre River found!")
-}
+# Combine all lines into one
+river_merged = sf::st_union(poudre)
+
+# Make it an sf object again
+river_merged = sf::st_as_sf(poudre)
 
 ```
 
 
 ```{r}
 #3: Use st_length() to compute the length of the river for future calculations
-# Compute the length of the river
-river_length <- st_length(river_merged)
+river_length <- st_length(river_merged)%>%
+  print()
 ```
 
 ```{r}
@@ -58,24 +56,41 @@ poudre_pts <- st_cast(river_merged, "POINT")
 
 ```{r}
 #5: Use the rast() function to read in the DEM file from the lynker-spatial S3 bucket shared in the last assignment. Be sure to use the vsis3 prefix!
+
 library(terra)
 
-# Read in DEM file from the S3 bucket using the vsis3 prefix
-dem <- rast('/vsis3/lynker-spatial/gridded-resources/dem.vrt')
+# Make a VSI-compatible URL for raster access
+url <- "/vsicurl/https://raw.githubusercontent.com/mikejohnson51/csu-ess-330/refs/heads/main/resources/foco-elev-cm.tif"
+
+# Load the raster
+dem <- rast(url)
+
 
 ```
 
 ```{r}
 #6: Use the extract() function to extract the elevation values from the DEM at the points along the river
-# Extract elevation values from the DEM at each point along the river
-elevation_values <- extract(dem, poudre_pts)
+
+
+poudre_pts_proj <- st_transform(poudre_pts, crs(dem))
+
+poudre_vect <- vect(poudre_pts_proj)
+
+elevation_values <- extract(dem, poudre_vect)
+
+elevation_values <- elevation_values["dem"]
+colnames(elevation_values) <- "elevation_cm"
+
+river_profile <- bind_cols(st_coordinates(poudre_pts_proj), elevation_values)
 
 ```
 
 ```{r}
 #7: Use bind_cols() to combine the spatial river points with the extracted elevation values
-# Combine the river points with the extracted elevation values
-river_profile <- bind_cols(st_coordinates(poudre_pts), elevation_values)
+
+river_profile <- bind_cols(st_coordinates(poudre_pts_proj), elevation_values)
+
+str(river_profile)
 
 ```
 
