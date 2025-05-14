@@ -29,8 +29,6 @@ osm = opq(st_bbox(st_transform(fc, 4326))) |>
 
 ```
 
-
-
 ```{r}
 #2: Filter the osm_lines object to only include the Cache la Poudre River and merge the lines into a single line object with st_union(). Convert the object to a sf object with st_as_sf() when done.
 
@@ -45,7 +43,6 @@ river_geom <- st_union(poudre)
 river_merged <- st_as_sf(st_sfc(river_geom, crs = st_crs(poudre)))
 
 ```
-
 
 ```{r}
 #3: Use st_length() to compute the length of the river for future calculations
@@ -140,7 +137,11 @@ print(sinuosity)
 
 
 ```
+
+
 The sinuosity of the Cache la Poudre River is 3.88.  This means the rive's actual path is nearly 4 times longer than the straight line distance from start to end. Having seen the meandering Poudre River before, this makes perfect sense.
+
+
 
 ```{r}
 #11: The slope of a river is the change in elevation between the inlet and outlet divided by the length of the river. Compute this value and report it. Remember the units of the elevation (cm) and of your length!
