@@ -26,17 +26,15 @@ osm = opq(st_bbox(st_transform(fc, 4326))) |>
 ```{r}
 #2: Filter the osm_lines object to only include the Cache la Poudre River and merge the lines into a single line object with st_union(). Convert the object to a sf object with st_as_sf() when done.
 
-#2: Filter for Cache la Poudre River, merge, convert
 
-# Only keep lines with name "Cache la Poudre River"
 poudre = osm$osm_lines %>%
   filter(grepl("Cache", name, ignore.case = TRUE))
 
-# Combine all lines into one
-river_merged = sf::st_union(poudre)
+# Combine all lines into one geometry
+river_geom <- st_union(poudre)
 
-# Make it an sf object again
-river_merged = sf::st_as_sf(poudre)
+# Turn the merged geometry into a single-feature sf object
+river_merged <- st_as_sf(st_sfc(river_geom, crs = st_crs(poudre)))
 
 ```
 
@@ -71,17 +69,20 @@ dem <- rast(url)
 ```{r}
 #6: Use the extract() function to extract the elevation values from the DEM at the points along the river
 
+fc_proj <- st_transform(fc, crs(dem))
 
-poudre_pts_proj <- st_transform(poudre_pts, crs(dem))
+dem_crop <- crop(dem, fc_proj)
+
+poudre_pts_proj <- st_transform(poudre_pts, crs(dem_crop))
 
 poudre_vect <- vect(poudre_pts_proj)
 
-elevation_values <- extract(dem, poudre_vect)
+elevation_values <- extract(dem_crop, poudre_vect)
 
 elevation_values <- elevation_values["dem"]
 colnames(elevation_values) <- "elevation_cm"
 
-river_profile <- bind_cols(st_coordinates(poudre_pts_proj), elevation_values)
+
 
 ```
 
@@ -90,7 +91,7 @@ river_profile <- bind_cols(st_coordinates(poudre_pts_proj), elevation_values)
 
 river_profile <- bind_cols(st_coordinates(poudre_pts_proj), elevation_values)
 
-str(river_profile)
+summary(river_profile$elevation_cm)
 
 ```
 
@@ -109,21 +110,36 @@ river_profile <- river_profile %>%
 #9: Use the st_distance() function to compute the straight-line distance between the first and last points in the river
 # Compute straight-line distance between the first and last points
 
-straight_line_distance <- st_distance(st_startpoint(poudre_pts), st_endpoint(poudre_pts))
+
+#make a first and last point
+first_point <- poudre_pts[1, ]
+last_point <- poudre_pts[nrow(poudre_pts), ]
+
+straight_line_distance <- st_distance(first_point, last_point)%>%
+  print()
+
 
 ```
 
 ```{r}
 #10: Divide the length of the full river (step 3) by this straight-line distance to get the sinuosity. Report the value and what it means. Does this value make sense with respect to the complete Poudre River?
 # Sinuosity calculation: river length / straight-line distance
-sinuosity <- river_length / straight_line_distance
+
+#converting so both are #
+sinuosity <- as.numeric(river_length) / as.numeric(straight_line_distance)
+print(sinuosity)
+
+
 
 ```
+The sinuosity of the Cache la Poudre River is 3.88.  This means the rive's actual path is nearly 4 times longer than the straight line distance from start to end. Having seen the meandering Poudre River before, this makes perfect sense.
 
 ```{r}
 #11: The slope of a river is the change in elevation between the inlet and outlet divided by the length of the river. Compute this value and report it. Remember the units of the elevation (cm) and of your length!
 # Calculate the change in elevation (max - min elevation along the river)
-elevation_change <- max(river_profile$elevation) - min(river_profile$elevation)
+elevation_change <- max(river_profile$elevation_cm, na.rm = TRUE) - 
+                    min(river_profile$elevation_cm, na.rm = TRUE)
+
 
 # Compute slope (elevation change / river length)
 slope <- elevation_change / river_length
@@ -138,10 +154,10 @@ slope
 library(ggplot2)
 
 # Plot the river profile (elevation along the river)
-ggplot(river_profile, aes(x = ID, y = elevation)) +
+ggplot(river_profile, aes(x = ID, y = elevation_cm)) +
   geom_line() +
   labs(title = "Elevation Profile of Cache la Poudre River",
-       x = "Point ID", y = "Elevation (m)") +
+       x = "Point ID", y = "Elevation (cm)") +
   theme_minimal()
 
 ```
